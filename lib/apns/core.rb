@@ -1,5 +1,5 @@
 module APNS
-
+# foo
   class Server
     require 'socket'
     require 'openssl'

@@ -1,0 +1,8 @@
+RELEASE_NOTES
+
+v1.2.0 - 9/15/2014
+
+Made core.rb contain a class Server.
+
+User of gem should instantiate Server with setting for @host, @pem so that notifications can be sent to either production or dev apns servers on a per request basis.
+

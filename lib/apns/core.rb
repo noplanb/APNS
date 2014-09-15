@@ -1,93 +1,96 @@
 module APNS
-  require 'socket'
-  require 'openssl'
-  require 'json'
 
-  @host = 'gateway.sandbox.push.apple.com'
-  @port = 2195
-  # openssl pkcs12 -in mycert.p12 -out client-cert.pem -nodes -clcerts
-  @pem = nil # this should be the path of the pem file not the contentes
-  @pass = nil
+  class Server
+    require 'socket'
+    require 'openssl'
+    require 'json'
 
-  class << self
     attr_accessor :host, :pem, :port, :pass
-  end
-
-  def self.send_notification(device_token, message)
-    n = APNS::Notification.new(device_token, message)
-    self.send_notifications([n])
-  end
-
-  def self.send_notifications(notifications)
-    sock, ssl = self.open_connection
-    packed_nofications = self.packed_nofications(notifications)
-    ssl.write(packed_nofications)
-    ssl.close
-    sock.close
-  end
-
-  def self.packed_nofications(notifications)
-    bytes = ''
-
-    notifications.each do |notification|
-      # Each notification frame consists of
-      # 1. (e.g. protocol version) 2 (unsigned char [1 byte]) 
-      # 2. size of the full frame (unsigend int [4 byte], big endian)
-      pn = notification.packaged_notification
-      bytes << ([2, pn.bytesize].pack('CN') + pn)
+  
+    def initialize(params={})
+      @host = params[:host] || raise("Must initialize APNS with host gateway.")
+      @port = params[:port] || 2195
+      # openssl pkcs12 -in mycert.p12 -out client-cert.pem -nodes -clcerts
+      @pem = params[:pem] || raise("Must initialize APNS with path to pem file.")
+      @pass = nil
     end
 
-    bytes
-  end
-
-  def self.feedback
-    sock, ssl = self.feedback_connection
-
-    apns_feedback = []
-
-    while message = ssl.read(38)
-      timestamp, token_size, token = message.unpack('N1n1H*')
-      apns_feedback << [Time.at(timestamp), token]
+    def send_notification(device_token, message)
+      n = APNS::Notification.new(device_token, message)
+      send_notifications([n])
     end
 
-    ssl.close
-    sock.close
+    def send_notifications(notifications)
+      sock, ssl = open_connection
+      packed_nofications = packed_nofications(notifications)
+      ssl.write(packed_nofications)
+      ssl.close
+      sock.close
+    end
 
-    return apns_feedback
-  end
+    def packed_nofications(notifications)
+      bytes = ''
 
-  protected
+      notifications.each do |notification|
+        # Each notification frame consists of
+        # 1. (e.g. protocol version) 2 (unsigned char [1 byte]) 
+        # 2. size of the full frame (unsigend int [4 byte], big endian)
+        pn = notification.packaged_notification
+        bytes << ([2, pn.bytesize].pack('CN') + pn)
+      end
 
-  def self.open_connection
-    raise "The path to your pem file is not set. (APNS.pem = /path/to/cert.pem)" unless self.pem
-    raise "The path to your pem file does not exist!" unless File.exist?(self.pem)
+      bytes
+    end
 
-    context      = OpenSSL::SSL::SSLContext.new
-    context.cert = OpenSSL::X509::Certificate.new(File.read(self.pem))
-    context.key  = OpenSSL::PKey::RSA.new(File.read(self.pem), self.pass)
+    def feedback
+      sock, ssl = feedback_connection
 
-    sock         = TCPSocket.new(self.host, self.port)
-    ssl          = OpenSSL::SSL::SSLSocket.new(sock,context)
-    ssl.connect
+      apns_feedback = []
 
-    return sock, ssl
-  end
+      while message = ssl.read(38)
+        timestamp, token_size, token = message.unpack('N1n1H*')
+        apns_feedback << [Time.at(timestamp), token]
+      end
 
-  def self.feedback_connection
-    raise "The path to your pem file is not set. (APNS.pem = /path/to/cert.pem)" unless self.pem
-    raise "The path to your pem file does not exist!" unless File.exist?(self.pem)
+      ssl.close
+      sock.close
 
-    context      = OpenSSL::SSL::SSLContext.new
-    context.cert = OpenSSL::X509::Certificate.new(File.read(self.pem))
-    context.key  = OpenSSL::PKey::RSA.new(File.read(self.pem), self.pass)
+      return apns_feedback
+    end
 
-    fhost = self.host.gsub('gateway','feedback')
-    puts fhost
+    protected
 
-    sock         = TCPSocket.new(fhost, 2196)
-    ssl          = OpenSSL::SSL::SSLSocket.new(sock,context)
-    ssl.connect
+    def open_connection
+      raise "The path to your pem file is not set. (APNS.pem = /path/to/cert.pem)" unless @pem
+      raise "The path to your pem file does not exist!" unless File.exist?(@pem)
 
-    return sock, ssl
+      context      = OpenSSL::SSL::SSLContext.new
+      context.cert = OpenSSL::X509::Certificate.new(File.read(@pem))
+      context.key  = OpenSSL::PKey::RSA.new(File.read(@pem), @pass)
+
+      sock         = TCPSocket.new(@host, @port)
+      ssl          = OpenSSL::SSL::SSLSocket.new(sock,context)
+      ssl.connect
+
+      return sock, ssl
+    end
+
+    def feedback_connection
+      raise "The path to your pem file is not set. (APNS.pem = /path/to/cert.pem)" unless @pem
+      raise "The path to your pem file does not exist!" unless File.exist?(@pem)
+
+      context      = OpenSSL::SSL::SSLContext.new
+      context.cert = OpenSSL::X509::Certificate.new(File.read(@pem))
+      context.key  = OpenSSL::PKey::RSA.new(File.read(@pem), @pass)
+
+      fhost = @host.gsub('gateway','feedback')
+      puts fhost
+
+      sock         = TCPSocket.new(fhost, 2196)
+      ssl          = OpenSSL::SSL::SSLSocket.new(sock,context)
+      ssl.connect
+
+      return sock, ssl
+    end
   end
 end

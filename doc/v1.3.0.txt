@@ -1,6 +1,6 @@
 RELEASE_NOTES
 
-v1.2.0 - 9/15/2014
+v1.3.0 - 9/15/2014
 
 Made core.rb contain a class Server.
 
